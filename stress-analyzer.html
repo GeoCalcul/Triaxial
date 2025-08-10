@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stress Analysis Tool</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; padding: 20px; background-color: #f5f5f5; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useCallback } = React;
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+        const { Upload, FileText } = lucide;
+
+        const StressAnalysisPlot = () => {
+            const [selectedPlot, setSelectedPlot] = useState('p_vs_q');
+            const [csvData, setCsvData] = useState(null);
+            const [dataSource, setDataSource] = useState('default');
+            const [uploadStatus, setUploadStatus] = useState('');
+
+            // Handle CSV file upload
+            const handleFileUpload = useCallback(async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (!file.name.toLowerCase().endsWith('.csv')) {
+                    setUploadStatus('Please upload a CSV file');
+                    return;
+                }
+
+                try {
+                    const text = await file.text();
+                    setCsvData(text);
+                    setDataSource('csv');
+                    setUploadStatus(`✓ Loaded ${file.name}`);
+                } catch (error) {
+                    setUploadStatus('Error reading file');
+                    console.error('File reading error:', error);
+                }
+            }, []);
+
+            const processedData = useMemo(() => {
+                let rawDataToUse;
+                
+                if (dataSource === 'csv' && csvData) {
+                    // Parse CSV data
+                    const lines = csvData.split('\n').filter(line => line.trim());
+                    const header = lines[0].split(',').map(h => h.trim());
+                    const dataRows = lines.slice(1);
+                    
+                    // Look for columns that might contain stress data
+                    const findColumn = (patterns) => {
+                        for (const pattern of patterns) {
+                            const index = header.findIndex(h => 
+                                h.toLowerCase().includes(pattern.toLowerCase()) ||
+                                h.toLowerCase().includes(pattern.toLowerCase().replace('_', '')) ||
+                                h.toLowerCase().includes(pattern.toLowerCase().replace(':', ''))
+                            );
+                            if (index !== -1) return index;
+                        }
+                        return -1;
+                    };
+                    
+                    const sigma1Index = findColumn(['sigma1', 'principle_stress:0', 'principal_stress_1', 's1']);
+                    const sigma2Index = findColumn(['sigma2', 'principle_stress:1', 'principal_stress_2', 's2']);
+                    const sigma3Index = findColumn(['sigma3', 'principle_stress:2', 'principal_stress_3', 's3']);
+                    
+                    if (sigma1Index === -1 || sigma2Index === -1 || sigma3Index === -1) {
+                        setUploadStatus('⚠️ Could not find principal stress columns (sigma1, sigma2, sigma3)');
+                        // Fall back to default data
+                        rawDataToUse = `mean_stress principle_stress:0 principle_stress:1 principle_stress:2 shear_stress:0 shear_stress:1 shear_stress:2 points:0 points:1 points:2 -69365 37446 -2.46E+05 237.72 1.35E+05 0 0 1.507 1.0118 0 1.12E+05 58424 1.54E+05 1.23E+05 -83897 0 0 1.5321 1.0113 0 55932 1.37E+05 -54218 84859 -22311 0 0 1.5571 1.0117 0 89543 1.85E+05 -24037 1.08E+05 -11915 0 0 1.5824 1.0116 0 1.02E+05 1.95E+05 -5371.9 1.17E+05 -6204 0 0 1.6077 1.0115 0 1.04E+05 1.96E+05 -2228 1.18E+05 -3781 0 0 1.633 1.0115 0 1.11E+05 2.07E+05 1771.2 1.23E+05 -1428.8 0 0 1.6583 1.0116 0 1.07E+05 2.06E+05 -5636.6 1.20E+05 -858.31 0 0 1.6836 1.0115 0 1.06E+05 2.08E+05 -8394.9 1.20E+05 -725.42 0 0 1.7089 1.0115 0 1.09E+05 2.10E+05 -5082 1.22E+05 -668.84 0 0 1.7342 1.0115 0 1.10E+05 2.11E+05 -3537.7 1.22E+05 -451.96 0 0 1.7595 1.0115 0 1.09E+05 2.11E+05 -4807.6 1.22E+05 -276.75 0 0 1.7849 1.0115 0 1.09E+05 2.12E+05 -5233.6 1.22E+05 -178.23 0 0 1.8102 1.0115 0 1.10E+05 2.12E+05 -5011.1 1.22E+05 -158.94 0 0 1.8355 1.0115 0 1.10E+05 2.12E+05 -4919.5 1.22E+05 -128.38 0 0 1.8608 1.0115 0 1.10E+05 2.12E+05 -4896.6 1.22E+05 -101.06 0 0 1.8861 1.0115 0 1.10E+05 2.12E+05 -4881.3 1.22E+05 -89.232 0 0 1.9114 1.0115 0 1.10E+05 2.13E+05 -4869.1 1.22E+05 -118.92 0 0 1.9367 1.0115 0`;
+                    } else {
+                        // Process CSV data
+                        const data = dataRows.map((row, rowIndex) => {
+                            const values = row.split(',').map(val => {
+                                const num = parseFloat(val.trim());
+                                return isNaN(num) ? 0 : num;
+                            });
+                            
+                            const sigma1 = values[sigma1Index] || 0;
+                            const sigma2 = values[sigma2Index] || 0;
+                            const sigma3 = values[sigma3Index] || 0;
+                            
+                            // Calculate p (mean stress) and q (deviatoric stress)
+                            const p = (sigma1 + sigma2 + sigma3) / 3;
+                            const q = Math.sqrt(0.5 * ((sigma1 - sigma2)**2 + (sigma2 - sigma3)**2 + (sigma3 - sigma1)**2));
+                            
+                            return {
+                                p: p / 1000,
+                                q: q / 1000,
+                                sigma1: sigma1 / 1000,
+                                sigma2: sigma2 / 1000,
+                                sigma3: sigma3 / 1000,
+                                index: rowIndex
+                            };
+                        });
+                        
+                        // Calculate dp/dq using finite differences
+                        const dataWithDerivatives = data.map((point, i) => {
+                            let dpdq = 0;
+                            if (i > 0 && i < data.length - 1) {
+                                const dp = data[i + 1].p - data[i - 1].p;
+                                const dq = data[i + 1].q - data[i - 1].q;
+                                dpdq = dq !== 0 ? dp / dq : 0;
+                            } else if (i === 0 && data.length > 1) {
+                                const dp = data[i + 1].p - data[i].p;
+                                const dq = data[i + 1].q - data[i].q;
+                                dpdq = dq !== 0 ? dp / dq : 0;
+                            } else if (i === data.length - 1 && data.length > 1) {
+                                const dp = data[i].p - data[i - 1].p;
+                                const dq = data[i].q - data[i - 1].q;
+                                dpdq = dq !== 0 ? dp / dq : 0;
+                            }
+                            
+                            return {
+                                ...point,
+                                dpdq: Math.abs(dpdq) > 100 ? 0 : dpdq
+                            };
+                        });
+                        
+                        return dataWithDerivatives;
+                    }
+                } else {
+                    rawDataToUse = `mean_stress principle_stress:0 principle_stress:1 principle_stress:2 shear_stress:0 shear_stress:1 shear_stress:2 points:0 points:1 points:2 -69365 37446 -2.46E+05 237.72 1.35E+05 0 0 1.507 1.0118 0 1.12E+05 58424 1.54E+05 1.23E+05 -83897 0 0 1.5321 1.0113 0 55932 1.37E+05 -54218 84859 -22311 0 0 1.5571 1.0117 0 89543 1.85E+05 -24037 1.08E+05 -11915 0 0 1.5824 1.0116 0 1.02E+05 1.95E+05 -5371.9 1.17E+05 -6204 0 0 1.6077 1.0115 0 1.04E+05 1.96E+05 -2228 1.18E+05 -3781 0 0 1.633 1.0115 0 1.11E+05 2.07E+05 1771.2 1.23E+05 -1428.8 0 0 1.6583 1.0116 0 1.07E+05 2.06E+05 -5636.6 1.20E+05 -858.31 0 0 1.6836 1.0115 0 1.06E+05 2.08E+05 -8394.9 1.20E+05 -725.42 0 0 1.7089 1.0115 0 1.09E+05 2.10E+05 -5082 1.22E+05 -668.84 0 0 1.7342 1.0115 0 1.10E+05 2.11E+05 -3537.7 1.22E+05 -451.96 0 0 1.7595 1.0115 0 1.09E+05 2.11E+05 -4807.6 1.22E+05 -276.75 0 0 1.7849 1.0115 0 1.09E+05 2.12E+05 -5233.6 1.22E+05 -178.23 0 0 1.8102 1.0115 0 1.10E+05 2.12E+05 -5011.1 1.22E+05 -158.94 0 0 1.8355 1.0115 0 1.10E+05 2.12E+05 -4919.5 1.22E+05 -128.38 0 0 1.8608 1.0115 0 1.10E+05 2.12E+05 -4896.6 1.22E+05 -101.06 0 0 1.8861 1.0115 0 1.10E+05 2.12E+05 -4881.3 1.22E+05 -89.232 0 0 1.9114 1.0115 0 1.10E+05 2.13E+05 -4869.1 1.22E+05 -118.92 0 0 1.9367 1.0115 0`;
+                }
+
+                // Process space-separated default data
+                const lines = rawDataToUse.split('\n').filter(line => line.trim());
+                const dataRows = lines.slice(1);
+                
+                const data = dataRows.map(row => {
+                    const values = row.split(/\s+/).map(val => {
+                        const num = parseFloat(val);
+                        return isNaN(num) ? 0 : num;
+                    });
+                    
+                    const sigma1 = values[1];
+                    const sigma2 = values[2]; 
+                    const sigma3 = values[3];
+                    
+                    const p = (sigma1 + sigma2 + sigma3) / 3;
+                    const q = Math.sqrt(0.5 * ((sigma1 - sigma2)**2 + (sigma2 - sigma3)**2 + (sigma3 - sigma1)**2));
+                    
+                    return {
+                        p: p / 1000,
+                        q: q / 1000,
+                        sigma1: sigma1 / 1000,
+                        sigma2: sigma2 / 1000,
+                        sigma3: sigma3 / 1000,
+                        index: dataRows.indexOf(row)
+                    };
+                });
+                
+                const dataWithDerivatives = data.map((point, i) => {
+                    let dpdq = 0;
+                    if (i > 0 && i < data.length - 1) {
+                        const dp = data[i + 1].p - data[i - 1].p;
+                        const dq = data[i + 1].q - data[i - 1].q;
+                        dpdq = dq !== 0 ? dp / dq : 0;
+                    } else if (i === 0 && data.length > 1) {
+                        const dp = data[i + 1].p - data[i].p;
+                        const dq = data[i + 1].q - data[i].q;
+                        dpdq = dq !== 0 ? dp / dq : 0;
+                    } else if (i === data.length - 1 && data.length > 1) {
+                        const dp = data[i].p - data[i - 1].p;
+                        const dq = data[i].q - data[i - 1].q;
+                        dpdq = dq !== 0 ? dp / dq : 0;
+                    }
+                    
+                    return {
+                        ...point,
+                        dpdq: Math.abs(dpdq) > 100 ? 0 : dpdq
+                    };
+                });
+                
+                return dataWithDerivatives;
+            }, [csvData, dataSource]);
+
+            const CustomTooltip = ({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return React.createElement('div', {
+                        className: "bg-white p-3 border border-gray-300 rounded shadow"
+                    }, [
+                        React.createElement('p', { key: 'point', className: "text-sm font-medium" }, `Point ${data.index}`),
+                        React.createElement('p', { key: 'p', className: "text-sm text-blue-600" }, `p: ${data.p.toFixed(2)} kPa`),
+                        React.createElement('p', { key: 'q', className: "text-sm text-red-600" }, `q: ${data.q.toFixed(2)} kPa`),
+                        selectedPlot === 'dpdq_vs_p' && React.createElement('p', { key: 'dpdq', className: "text-sm text-green-600" }, `dp/dq: ${data.dpdq.toFixed(4)}`)
+                    ]);
+                }
+                return null;
+            };
+
+            return React.createElement('div', {
+                className: "w-full max-w-6xl mx-auto p-6 bg-white"
+            }, [
+                // Header and Upload Section
+                React.createElement('div', { key: 'header', className: "mb-6" }, [
+                    React.createElement('h2', { key: 'title', className: "text-2xl font-bold text-gray-800 mb-4" }, 'Stress Analysis Plots'),
+                    
+                    // File Upload
+                    React.createElement('div', { key: 'upload', className: "mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300" }, [
+                        React.createElement('div', { key: 'upload-content', className: "flex flex-col md:flex-row md:items-center gap-4" }, [
+                            React.createElement('div', { key: 'upload-left', className: "flex-1" }, [
+                                React.createElement('label', {
+                                    key: 'upload-label',
+                                    htmlFor: 'csvUpload',
+                                    className: "flex items-center gap-2 cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
+                                }, [
+                                    React.createElement(Upload, { key: 'upload-icon', className: "w-5 h-5" }),
+                                    React.createElement('span', { key: 'upload-text', className: "text-sm font-medium" }, 'Choose CSV File')
+                                ]),
+                                React.createElement('input', {
+                                    key: 'upload-input',
+                                    id: 'csvUpload',
+                                    type: 'file',
+                                    accept: '.csv',
+                                    onChange: handleFileUpload,
+                                    className: 'hidden'
+                                }),
+                                React.createElement('p', {
+                                    key: 'upload-help',
+                                    className: "text-xs text-gray-600 mt-2"
+                                }, 'CSV should contain columns: sigma1, sigma2, sigma3 (or similar naming)')
+                            ]),
+                            
+                            React.createElement('div', { key: 'upload-right', className: "flex items-center gap-2" }, [
+                                React.createElement('button', {
+                                    key: 'sample-btn',
+                                    onClick: () => {setDataSource('default'); setCsvData(null); setUploadStatus('');},
+                                    className: `px-3 py-1 text-sm rounded ${dataSource === 'default' ? 'bg-gray-300 text-gray-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`
+                                }, [
+                                    React.createElement(FileText, { key: 'file-icon', className: "w-4 h-4 inline mr-1" }),
+                                    'Use Sample Data'
+                                ])
+                            ])
+                        ]),
+                        
+                        uploadStatus && React.createElement('div', {
+                            key: 'upload-status',
+                            className: `mt-2 text-sm ${uploadStatus.startsWith('✓') ? 'text-green-600' : uploadStatus.startsWith('⚠️') ? 'text-orange-600' : 'text-red-600'}`
+                        }, uploadStatus)
+                    ]),
+                    
+                    // Plot Selection Buttons
+                    React.createElement('div', { key: 'plot-buttons', className: "flex gap-4 mb-4" }, [
+                        React.createElement('button', {
+                            key: 'p-vs-q-btn',
+                            onClick: () => setSelectedPlot('p_vs_q'),
+                            className: `px-4 py-2 rounded ${selectedPlot === 'p_vs_q' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
+                        }, 'p vs q Plot'),
+                        React.createElement('button', {
+                            key: 'dpdq-btn',
+                            onClick: () => setSelectedPlot('dpdq_vs_p'),
+                            className: `px-4 py-2 rounded ${selectedPlot === 'dpdq_vs_p' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
+                        }, 'dp/dq vs p Plot')
+                    ])
+                ]),
+
+                // Chart Area
+                React.createElement('div', { key: 'chart', className: "bg-gray-50 p-4 rounded-lg" }, [
+                    React.createElement(ResponsiveContainer, { key: 'chart-container', width: "100%", height: 500 }, [
+                        selectedPlot === 'p_vs_q' ? 
+                        React.createElement(LineChart, {
+                            key: 'p-vs-q-chart',
+                            data: processedData,
+                            margin: { top: 20, right: 30, left: 20, bottom: 20 }
+                        }, [
+                            React.createElement(CartesianGrid, { key: 'grid1', strokeDasharray: "3 3" }),
+                            React.createElement(XAxis, {
+                                key: 'xaxis1',
+                                dataKey: 'p',
+                                type: 'number',
+                                scale: 'linear',
+                                label: { value: 'p (Mean Stress) [kPa]', position: 'insideBottom', offset: -10 }
+                            }),
+                            React.createElement(YAxis, {
+                                key: 'yaxis1',
+                                dataKey: 'q',
+                                type: 'number',
+                                scale: 'linear',
+                                label: { value: 'q (Deviatoric Stress) [kPa]', angle: -90, position: 'insideLeft' }
+                            }),
+                            React.createElement(Tooltip, { key: 'tooltip1', content: CustomTooltip }),
+                            React.createElement(Legend, { key: 'legend1' }),
+                            React.createElement(Line, {
+                                key: 'line1',
+                                type: 'monotone',
+                                dataKey: 'q',
+                                stroke: '#2563eb',
+                                strokeWidth: 2,
+                                dot: { r: 4 },
+                                name: 'q vs p'
+                            })
+                        ]) :
+                        React.createElement(LineChart, {
+                            key: 'dpdq-chart',
+                            data: processedData,
+                            margin: { top: 20, right: 30, left: 20, bottom: 20 }
+                        }, [
+                            React.createElement(CartesianGrid, { key: 'grid2', strokeDasharray: "3 3" }),
+                            React.createElement(XAxis, {
+                                key: 'xaxis2',
+                                dataKey: 'p',
+                                type: 'number',
+                                scale: 'linear',
+                                label: { value: 'p (Mean Stress) [kPa]', position: 'insideBottom', offset: -10 }
+                            }),
+                            React.createElement(YAxis, {
+                                key: 'yaxis2',
+                                dataKey: 'dpdq',
+                                type: 'number',
+                                scale: 'linear',
+                                label: { value: 'dp/dq', angle: -90, position: 'insideLeft' }
+                            }),
+                            React.createElement(Tooltip, { key: 'tooltip2', content: CustomTooltip }),
+                            React.createElement(Legend, { key: 'legend2' }),
+                            React.createElement(Line, {
+                                key: 'line2',
+                                type: 'monotone',
+                                dataKey: 'dpdq',
+                                stroke: '#dc2626',
+                                strokeWidth: 2,
+                                dot: { r: 4 },
+                                name: 'dp/dq vs p'
+                            })
+                        ])
+                    ])
+                ]),
+
+                // Info Cards
+                React.createElement('div', { key: 'info', className: "mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" }, [
+                    React.createElement('div', { key: 'card1', className: "bg-blue-50 p-4 rounded" }, [
+                        React.createElement('h3', { key: 'h1', className: "font-semibold text-blue-800 mb-2" }, 'Mean Stress (p)'),
+                        React.createElement('p', { key: 'p1', className: "text-blue-700" }, 'p = (σ₁ + σ₂ + σ₃) / 3'),
+                        React.createElement('p', { key: 'desc1', className: "text-xs text-blue-600 mt-1" }, 'Average of principal stresses')
+                    ]),
+                    React.createElement('div', { key: 'card2', className: "bg-red-50 p-4 rounded" }, [
+                        React.createElement('h3', { key: 'h2', className: "font-semibold text-red-800 mb-2" }, 'Deviatoric Stress (q)'),
+                        React.createElement('p', { key: 'p2', className: "text-red-700" }, 'q = √[½((σ₁-σ₂)² + (σ₂-σ₃)² + (σ₃-σ₁)²)]'),
+                        React.createElement('p', { key: 'desc2', className: "text-xs text-red-600 mt-1" }, 'Measure of shear stress')
+                    ]),
+                    React.createElement('div', { key: 'card3', className: "bg-green-50 p-4 rounded" }, [
+                        React.createElement('h3', { key: 'h3', className: "font-semibold text-green-800 mb-2" }, 'Derivative (dp/dq)'),
+                        React.createElement('p', { key: 'p3', className: "text-green-700" }, 'Finite difference approximation'),
+                        React.createElement('p', { key: 'desc3', className: "text-xs text-green-600 mt-1" }, 'Rate of change of p with respect to q')
+                    ])
+                ]),
+
+                // Footer
+                React.createElement('div', { key: 'footer', className: "mt-4 text-xs text-gray-600" }, [
+                    React.createElement('p', { key: 'info1' }, `Data points: ${processedData.length} | All stresses converted to kPa for readability | Data source: ${dataSource === 'csv' ? 'Uploaded CSV' : 'Sample data'}`),
+                    dataSource === 'csv' && React.createElement('p', {
+                        key: 'info2',
+                        className: "mt-1"
+                    }, 'Expected CSV format: columns named sigma1, sigma2, sigma3 (or variations like principle_stress:0, s1, etc.)')
+                ])
+            ]);
+        };
+
+        ReactDOM.render(React.createElement(StressAnalysisPlot), document.getElementById('root'));
+    </script>
+</body>
+</html>
